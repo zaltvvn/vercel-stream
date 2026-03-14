@@ -2,36 +2,47 @@ export default async function handler(req, res) {
 
   const ch = req.query.ch || "25";
 
-  const url = `https://www.adintrend.tv/hd/live/i.php?ch=${ch}`;
+  const pageUrl = `https://www.adintrend.tv/hd/live/i.php?ch=${ch}`;
 
   try {
 
-    const r = await fetch(url, {
+    const page = await fetch(pageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Referer": "https://www.adintrend.tv/",
+        "Origin": "https://www.adintrend.tv"
+      }
+    });
+
+    const html = await page.text();
+
+    const match = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+
+    if (!match) {
+      res.status(404).send("Stream not found");
+      return;
+    }
+
+    const m3u8 = match[0];
+
+    const stream = await fetch(m3u8, {
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://www.adintrend.tv/"
       }
     });
 
-    const html = await r.text();
-
-    const match = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
-
-    if (!match) {
-      res.status(404).send("m3u8 not found");
-      return;
-    }
-
-    const stream = await fetch(match[0]);
     const playlist = await stream.text();
 
-    res.setHeader("Content-Type","application/vnd.apple.mpegurl");
-    res.setHeader("Access-Control-Allow-Origin","*");
+    res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
     res.send(playlist);
 
-  } catch(e) {
-    res.status(500).send(e.toString());
+  } catch (err) {
+
+    res.status(500).send(err.toString());
+
   }
 
 }
