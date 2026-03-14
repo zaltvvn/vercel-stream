@@ -15,14 +15,16 @@ export default async function handler(req, res) {
     const html = await page.text();
 
     // 2. lấy cxid
-    const cxid = html.match(/cxid=([a-zA-Z0-9]+)/);
+    const cxidMatch = html.match(/cxid=([a-zA-Z0-9]+)/);
 
-    if(!cxid){
-      res.json({error:"cxid not found"});
+    if(!cxidMatch){
+      res.status(500).send("cxid not found");
       return;
     }
 
-    // 3. tạo time giống site
+    const cxid = cxidMatch[1];
+
+    // 3. tạo dtime
     const now = new Date();
     const dtime =
       String(now.getDate()).padStart(2,'0') + "-" +
@@ -31,10 +33,10 @@ export default async function handler(req, res) {
       now.getHours() + ":" +
       now.getMinutes();
 
-    // 4. gọi iframe
+    // 4. gọi iframe player
     const iframeUrl =
       `https://www.adintrend.tv/hd/live/i.php?ch=${ch}` +
-      `&cxid=${cxid[1]}` +
+      `&cxid=${cxid}` +
       `&tmpx=14.242.182.130` +
       `&ccc=VN` +
       `&device=desktop` +
@@ -51,24 +53,33 @@ export default async function handler(req, res) {
 
     const playerHtml = await player.text();
 
-    // 5. tìm m3u8
-    const m3u8 = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    // 5. tìm link m3u8
+    const m3u8Match = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
-    if(!m3u8){
-      res.json({
-        error:"stream not found",
-        iframe:iframeUrl
-      });
+    if(!m3u8Match){
+      res.status(500).send("m3u8 not found");
       return;
     }
 
-    res.json({
-      channel:ch,
-      stream:m3u8[0]
+    const m3u8 = m3u8Match[0];
+
+    // 6. tải playlist
+    const playlist = await fetch(m3u8,{
+      headers:{
+        "User-Agent":"Mozilla/5.0",
+        "Referer":"https://www.adintrend.tv/"
+      }
     });
 
+    const text = await playlist.text();
+
+    res.status(200);
+    res.setHeader("Content-Type","application/vnd.apple.mpegurl");
+    res.setHeader("Access-Control-Allow-Origin","*");
+    res.send(text);
+
   } catch(e){
-    res.json({error:e.toString()});
+    res.status(500).send(e.toString());
   }
 
 }
