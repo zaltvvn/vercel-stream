@@ -4,65 +4,59 @@ export default async function handler(req, res) {
 
   try {
 
-    // STEP 1: load trang channel
+    // 1. load trang kênh
     const page = await fetch(`https://www.adintrend.tv/hd/ch${ch}?t=live`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://www.adintrend.tv/"
+      headers:{
+        "User-Agent":"Mozilla/5.0",
+        "Referer":"https://www.adintrend.tv/"
       }
     });
 
     const html = await page.text();
 
-    // STEP 2: lấy link iframe i.php
-    const iframeMatch = html.match(/https:\/\/www\.adintrend\.tv\/hd\/live\/i\.php[^"]+/);
+    // 2. tìm iframe
+    const iframe = html.match(/https:\/\/www\.adintrend\.tv\/hd\/live\/i\.php[^"]+/);
 
-    if (!iframeMatch) {
+    if(!iframe){
       res.status(500).send("iframe not found");
       return;
     }
 
-    const iframeUrl = iframeMatch[0];
-
-    // STEP 3: load iframe player
-    const player = await fetch(iframeUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://www.adintrend.tv/"
+    // 3. load player
+    const player = await fetch(iframe[0],{
+      headers:{
+        "User-Agent":"Mozilla/5.0",
+        "Referer":"https://www.adintrend.tv/"
       }
     });
 
     const playerHtml = await player.text();
 
-    // STEP 4: tìm m3u8
-    const m3u8Match = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    // 4. tìm m3u8
+    const m3u8 = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
-    if (!m3u8Match) {
+    if(!m3u8){
       res.status(500).send("stream not found");
       return;
     }
 
-    const m3u8 = m3u8Match[0];
-
-    // STEP 5: proxy playlist
-    const stream = await fetch(m3u8, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://www.adintrend.tv/"
+    // 5. load playlist
+    const playlist = await fetch(m3u8[0],{
+      headers:{
+        "User-Agent":"Mozilla/5.0",
+        "Referer":"https://www.adintrend.tv/"
       }
     });
 
-    const playlist = await stream.text();
+    const text = await playlist.text();
 
-    res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.status(200);
+    res.setHeader("Content-Type","application/vnd.apple.mpegurl");
+    res.setHeader("Access-Control-Allow-Origin","*");
+    res.send(text);
 
-    res.send(playlist);
-
-  } catch (e) {
-
+  } catch(e){
     res.status(500).send(e.toString());
-
   }
 
 }
