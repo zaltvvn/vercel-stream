@@ -1,3 +1,4 @@
+
 export default async function handler(req, res) {
 
   const ch = req.query.ch || "25";
@@ -6,35 +7,36 @@ export default async function handler(req, res) {
 
     const ip =
       req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket?.remoteAddress ||
       "8.8.8.8";
 
-    // load channel page
+    /* 1. load trang channel */
     const page = await fetch(`https://www.adintrend.tv/hd/ch${ch}?t=live`, {
-      headers:{
-        "User-Agent":"Mozilla/5.0",
-        "Referer":"https://www.adintrend.tv/"
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.adintrend.tv/"
       }
     });
 
     const html = await page.text();
 
-    const cxidMatch = html.match(/cxid=([a-zA-Z0-9]+)/);
+    const cxid = html.match(/cxid=([a-zA-Z0-9]+)/)?.[1];
 
-    if(!cxidMatch){
+    if (!cxid) {
       res.status(500).send("cxid not found");
       return;
     }
 
-    const cxid = cxidMatch[1];
-
+    /* 2. tạo dtime */
     const now = new Date();
     const dtime =
-      String(now.getDate()).padStart(2,'0') + "-" +
-      String(now.getMonth()+1).padStart(2,'0') + "-" +
+      String(now.getDate()).padStart(2, "0") + "-" +
+      String(now.getMonth() + 1).padStart(2, "0") + "-" +
       now.getFullYear() + "-" +
       now.getHours() + ":" +
       now.getMinutes();
 
+    /* 3. gọi iframe player */
     const iframeUrl =
       `https://www.adintrend.tv/hd/live/i.php?ch=${ch}` +
       `&cxid=${cxid}` +
@@ -45,42 +47,44 @@ export default async function handler(req, res) {
       `&platform=Win32` +
       `&touch=0`;
 
-    const player = await fetch(iframeUrl,{
-      headers:{
-        "User-Agent":"Mozilla/5.0",
-        "Referer":`https://www.adintrend.tv/hd/ch${ch}?t=live`
+    const player = await fetch(iframeUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": `https://www.adintrend.tv/hd/ch${ch}?t=live`
       }
     });
 
     const playerHtml = await player.text();
 
-    const m3u8Match = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    const m3u8 = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/)?.[0];
 
-    if(!m3u8Match){
+    if (!m3u8) {
       res.status(500).send("m3u8 not found");
       return;
     }
 
-    const m3u8 = m3u8Match[0];
-
-    // proxy playlist
-    const playlist = await fetch(m3u8,{
-      headers:{
-        "Origin":"https://www.adintrend.tv",
-        "Referer":"https://www.adintrend.tv/",
-        "User-Agent":"Mozilla/5.0"
+    /* 4. tải playlist thật */
+    const playlist = await fetch(m3u8, {
+      headers: {
+        "Origin": "https://www.adintrend.tv",
+        "Referer": "https://www.adintrend.tv/",
+        "User-Agent": "Mozilla/5.0"
       }
     });
 
-    const text = await playlist.text();
+    let text = await playlist.text();
 
-    res.setHeader("Content-Type","application/vnd.apple.mpegurl");
-    res.setHeader("Access-Control-Allow-Origin","*");
+    /* 5. rewrite segment */
+    const base = m3u8.substring(0, m3u8.lastIndexOf("/") + 1);
+
+    text = text.replace(/(.*\.ts.*)/g, base + "$1");
+
+    res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
     res.send(text);
 
-  } catch(e){
+  } catch (e) {
     res.status(500).send(e.toString());
   }
-
 }
