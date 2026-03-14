@@ -4,13 +4,11 @@ export default async function handler(req, res) {
 
   try {
 
-    // IP client
     const ip =
       req.headers["x-forwarded-for"]?.split(",")[0] ||
-      req.socket?.remoteAddress ||
       "8.8.8.8";
 
-    // 1. load trang channel
+    // load channel page
     const page = await fetch(`https://www.adintrend.tv/hd/ch${ch}?t=live`, {
       headers:{
         "User-Agent":"Mozilla/5.0",
@@ -20,7 +18,6 @@ export default async function handler(req, res) {
 
     const html = await page.text();
 
-    // 2. lấy cxid
     const cxidMatch = html.match(/cxid=([a-zA-Z0-9]+)/);
 
     if(!cxidMatch){
@@ -30,9 +27,7 @@ export default async function handler(req, res) {
 
     const cxid = cxidMatch[1];
 
-    // 3. tạo dtime
     const now = new Date();
-
     const dtime =
       String(now.getDate()).padStart(2,'0') + "-" +
       String(now.getMonth()+1).padStart(2,'0') + "-" +
@@ -40,7 +35,6 @@ export default async function handler(req, res) {
       now.getHours() + ":" +
       now.getMinutes();
 
-    // 4. gọi iframe player
     const iframeUrl =
       `https://www.adintrend.tv/hd/live/i.php?ch=${ch}` +
       `&cxid=${cxid}` +
@@ -60,7 +54,6 @@ export default async function handler(req, res) {
 
     const playerHtml = await player.text();
 
-    // 5. tìm link m3u8
     const m3u8Match = playerHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
     if(!m3u8Match){
@@ -70,12 +63,21 @@ export default async function handler(req, res) {
 
     const m3u8 = m3u8Match[0];
 
-    // 6. redirect tới m3u8
-    res.writeHead(302,{
-      Location: m3u8
+    // proxy playlist
+    const playlist = await fetch(m3u8,{
+      headers:{
+        "Origin":"https://www.adintrend.tv",
+        "Referer":"https://www.adintrend.tv/",
+        "User-Agent":"Mozilla/5.0"
+      }
     });
 
-    res.end();
+    const text = await playlist.text();
+
+    res.setHeader("Content-Type","application/vnd.apple.mpegurl");
+    res.setHeader("Access-Control-Allow-Origin","*");
+
+    res.send(text);
 
   } catch(e){
     res.status(500).send(e.toString());
